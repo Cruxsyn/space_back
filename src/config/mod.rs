@@ -34,9 +34,15 @@ pub struct Config {
 impl Config {
     /// Load configuration from environment variables
     pub fn from_env() -> Result<Self, ConfigError> {
+        // Render provides PORT env var, fall back to SERVER_ADDR or default
+        let server_addr = if let Ok(port) = env::var("PORT") {
+            format!("0.0.0.0:{}", port)
+        } else {
+            env::var("SERVER_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_string())
+        };
+
         Ok(Self {
-            server_addr: env::var("SERVER_ADDR")
-                .unwrap_or_else(|_| "0.0.0.0:8080".to_string())
+            server_addr: server_addr
                 .parse()
                 .map_err(|_| ConfigError::InvalidAddress)?,
 
