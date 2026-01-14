@@ -16,7 +16,7 @@ pub struct AppState {
     pub profile_store: ProfileStore,
     pub inventory_store: InventoryStore,
     pub stripe: StripeService,
-    pub matchmaking: MatchmakingService,
+    pub matchmaking: Arc<MatchmakingService>,
     pub match_registry: Arc<MatchRegistry>,
 }
 
@@ -37,8 +37,8 @@ impl AppState {
         // Initialize match registry
         let match_registry = Arc::new(MatchRegistry::new());
 
-        // Initialize matchmaking service
-        let matchmaking = MatchmakingService::new(match_registry.clone());
+        // Initialize matchmaking service (Arc for sharing across cloned AppState)
+        let matchmaking = Arc::new(MatchmakingService::new(match_registry.clone()));
 
         Self {
             config,
