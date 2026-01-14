@@ -26,9 +26,16 @@ use crate::ws::protocol::ShipType;
 
 /// Build the application router
 pub fn build_router(state: AppState) -> Router {
-    // CORS configuration
+    // CORS configuration - support multiple origins (comma-separated in CLIENT_ORIGIN)
+    let allowed_origins: Vec<header::HeaderValue> = state
+        .config
+        .client_origin
+        .split(',')
+        .filter_map(|s| s.trim().parse::<header::HeaderValue>().ok())
+        .collect();
+    
     let cors = CorsLayer::new()
-        .allow_origin(state.config.client_origin.parse::<header::HeaderValue>().unwrap())
+        .allow_origin(allowed_origins)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
         .allow_credentials(true);
