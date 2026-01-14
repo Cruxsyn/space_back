@@ -154,11 +154,9 @@ impl MatchmakingService {
 
         info!(user_id = %user_id, queue_size = queue.len(), "Player joined matchmaking queue");
 
-        // Try to form a match
-        if let Some(players) = queue.try_form_match() {
-            drop(queue); // Release lock before spawning match
-            self.create_match(players).await;
-        }
+        // Don't try to form match immediately - let the run() loop handle it
+        // This gives time for WebSocket connections to be established
+        // The run() loop will only include connected players when forming matches
 
         Ok(())
     }
@@ -234,17 +232,35 @@ impl MatchmakingService {
 
     /// Run the matchmaking service (periodic queue processing)
     pub async fn run(&self) {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
 
         loop {
             interval.tick().await;
 
-            // Try to form matches from queue
+            // Get connected player IDs
+            let connected_ids: std::collections::HashSet<Uuid> = 
+                self.players.iter().map(|entry| *entry.key()).collect();
+
+            // Try to form matches from queue with connected players only
             let mut queue = self.queue.lock().await;
-            while let Some(players) = queue.try_form_match() {
-                drop(queue); // Release lock for match creation
-                self.create_match(players).await;
-                queue = self.queue.lock().await;
+            
+            // Filter queue to only include connected players for match formation
+            let connected_count = queue.iter().filter(|p| connected_ids.contains(&p.user_id)).count();
+            
+            let min_players = queue.min_players();
+            let max_players = queue.max_players();
+            let waited_too_long = queue.has_waited_too_long(&connected_ids);
+            
+            if connected_count >= min_players || (connected_count >= 1 && waited_too_long) {
+                // Extract connected players for match
+                let players: Vec<QueuedPlayer> = queue
+                    .drain_connected(&connected_ids, max_players)
+                    .collect();
+                
+                if !players.is_empty() {
+                    drop(queue); // Release lock for match creation
+                    self.create_match(players).await;
+                }
             }
         }
     }

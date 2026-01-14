@@ -117,6 +117,40 @@ impl MatchmakingQueue {
     pub fn max_players(&self) -> usize {
         self.max_players
     }
+
+    /// Iterate over queued players
+    pub fn iter(&self) -> impl Iterator<Item = &QueuedPlayer> {
+        self.queue.iter()
+    }
+
+    /// Check if any connected player has waited too long
+    pub fn has_waited_too_long(&self, connected_ids: &std::collections::HashSet<Uuid>) -> bool {
+        self.queue
+            .iter()
+            .filter(|p| connected_ids.contains(&p.user_id))
+            .any(|p| p.wait_time() >= self.max_wait_time)
+    }
+
+    /// Drain connected players up to max_count for match formation
+    pub fn drain_connected(
+        &mut self,
+        connected_ids: &std::collections::HashSet<Uuid>,
+        max_count: usize,
+    ) -> impl Iterator<Item = QueuedPlayer> + '_ {
+        let mut extracted = Vec::new();
+        let mut remaining = VecDeque::new();
+
+        while let Some(player) = self.queue.pop_front() {
+            if connected_ids.contains(&player.user_id) && extracted.len() < max_count {
+                extracted.push(player);
+            } else {
+                remaining.push_back(player);
+            }
+        }
+
+        self.queue = remaining;
+        extracted.into_iter()
+    }
 }
 
 impl Default for MatchmakingQueue {
