@@ -47,6 +47,8 @@ impl MatchmakingService {
         &self,
         user_id: Uuid,
     ) -> (mpsc::Sender<PlayerInput>, broadcast::Receiver<ServerMsg>) {
+        info!(user_id = %user_id, "Registering player connection");
+        
         // Create personal channels for this player
         let (input_tx, mut input_rx) = mpsc::channel::<PlayerInput>(64);
         let (snapshot_tx, snapshot_rx) = broadcast::channel::<ServerMsg>(64);
@@ -58,6 +60,7 @@ impl MatchmakingService {
         };
 
         self.players.insert(user_id, connection);
+        info!(user_id = %user_id, total_connected = self.players.len(), "Player connection registered");
 
         // Spawn a task to route messages from personal channel to match channel
         let registry = self.registry.clone();
@@ -233,6 +236,7 @@ impl MatchmakingService {
     /// Run the matchmaking service (periodic queue processing)
     pub async fn run(&self) {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(500));
+        info!("Matchmaking service started");
 
         loop {
             interval.tick().await;
@@ -244,22 +248,42 @@ impl MatchmakingService {
             // Try to form matches from queue with connected players only
             let mut queue = self.queue.lock().await;
             
-            // Filter queue to only include connected players for match formation
+            let queue_len = queue.len();
             let connected_count = queue.iter().filter(|p| connected_ids.contains(&p.user_id)).count();
+            
+            // Log queue state periodically when there are players
+            if queue_len > 0 || !connected_ids.is_empty() {
+                info!(
+                    queue_len = queue_len,
+                    connected_players = connected_ids.len(),
+                    connected_in_queue = connected_count,
+                    "Matchmaking tick"
+                );
+            }
             
             let min_players = queue.min_players();
             let max_players = queue.max_players();
             let waited_too_long = queue.has_waited_too_long(&connected_ids);
             
             if connected_count >= min_players || (connected_count >= 1 && waited_too_long) {
+                info!(
+                    connected_count = connected_count,
+                    min_players = min_players,
+                    waited_too_long = waited_too_long,
+                    "Attempting to form match"
+                );
+                
                 // Extract connected players for match
                 let players: Vec<QueuedPlayer> = queue
                     .drain_connected(&connected_ids, max_players)
                     .collect();
                 
                 if !players.is_empty() {
+                    info!(player_count = players.len(), "Forming match with players");
                     drop(queue); // Release lock for match creation
                     self.create_match(players).await;
+                } else {
+                    warn!("drain_connected returned empty despite connected_count > 0");
                 }
             }
         }
