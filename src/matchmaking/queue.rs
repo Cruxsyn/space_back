@@ -121,6 +121,6 @@ impl MatchmakingQueue {
 
 impl Default for MatchmakingQueue {
     fn default() -> Self {
-        Self::new(2, 20, 30) // 2-20 players, 30 second max wait
+        Self::new(1, 20, 5) // 1-20 players, 5 second max wait (solo play allowed for testing)
     }
 }
