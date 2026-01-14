@@ -118,8 +118,9 @@ impl MatchmakingService {
                         }
                     }
                 } else {
-                    // No match, wait a bit
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    // No match yet - poll frequently to catch match assignment quickly
+                    // This is critical: we must subscribe before match sends MatchJoined
+                    tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
                 }
 
                 // Check if player disconnected
@@ -241,6 +242,11 @@ impl MatchmakingService {
 
             info!(match_id = %match_id, "Match removed from registry");
         });
+
+        // CRITICAL: Give routing tasks time to detect the match assignment and subscribe
+        // to the match's broadcast channel BEFORE we send JoinMatch commands.
+        // Without this delay, MatchJoined messages may be lost due to race condition.
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         // Send join commands to move players into the match
         for player in players {

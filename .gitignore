@@ -1,0 +1,22 @@
+# Environment files (NEVER commit these!)
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+/target/
+debug/
+release/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
